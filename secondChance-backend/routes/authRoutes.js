@@ -99,6 +99,59 @@ router.post('/login', async (req, res) => {
     }
 });
 
+router.put('/update', async (req, res) => {
 
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        logger.error('Validation errors in update request', errors.array());
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+        const email = req.headers.email;
+        if (!email) {
+            logger.error('Email not found in the request headers');
+            return res.status(400).json({ error: "Email not found in the request headers" });
+        }
+      
+        const db = await connectToDatabase();
+        const collection = db.collection('users');
+  
+        const existingUser = await collection.findOne({ email: email });
+
+        if (!existingUser) {
+            logger.error('User not found');
+            return res.status(404).json({ error: "User not found"});
+        }
+
+        const { firstName } = req.body;
+        existingUser.firstName = firstName;
+        existingUser.updatedAt = new Date();
+
+        const updatedUser = await collection.findOneAndUpdate(
+            { email },
+            { $set: existingUser },
+            { returnDocument: 'after' }
+        );
+          
+        if (!updatedUser) {
+        logger.error('User update failed');
+        return res.status(500).json({ error: 'User update failed' });
+        }
+          
+        const payload = {
+            user: {
+                id: existingUser._id.toString(),
+            },
+        };
+
+        const authtoken = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+        logger.info('User updated successfully');
+        res.json({ authtoken });
+    } catch (error) {
+        logger.error(error);
+        return res.status(500).send("Internal Server Error");
+    }
+});  
 
 module.exports = router;
